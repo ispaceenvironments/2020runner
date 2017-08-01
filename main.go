@@ -101,6 +101,8 @@ func GetSoftwareStatus() (bool, bool, error) {
 }
 
 func InstallNetworkCatalog() error {
+	// If we're installing the network catalog anyway, the local catalog should have already been uninstalled
+	os.RemoveAll(`C:\ProgramData\2020\DSA`)
 	out, err := exec.Command(PATH_CATALOG).CombinedOutput()
 	if err != nil {
 		return errors.Wrapf(err, "Setup command output: %s", out)
