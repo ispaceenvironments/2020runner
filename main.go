@@ -22,8 +22,11 @@ type DSACatalogState struct {
 }
 
 const (
-	CAP2020_CATALOG  = `SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\20-20 COMMERCIAL CATALOGS`
-	CAP2020_SOFTWARE = ``
+	CAP2020_CATALOG          = `SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\20-20 COMMERCIAL CATALOGS`
+	CAP2020_SOFTWARE         = `SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\{5D4D912A-D5EE-4748-84B8-7C2C75EC4408}`
+	CAP2020_SOFTWARE_CURRENT = `13.00.13037`
+	PATH_CATALOG             = `\\10.0.9.147\2020catalogbeta`
+	PATH_SOFTWARE            = `\\10.0.9.147\2020software`
 )
 
 // Returned tuple is "installed", "on network", "error"
@@ -53,7 +56,7 @@ func GetCatalogStatus() (bool, bool, error) {
 			return true, catalogstate.UsingNetwork, nil
 		}
 	}
-	
+
 	return false, catalogstate.UsingNetwork, nil
 }
 
@@ -81,10 +84,28 @@ func UninstallCatalog() error {
 	return nil
 }
 
+// "Is Installed", "Is Current", error
+func GetSoftwareStatus() (bool, bool, error) {
+	k, err := registry.OpenKey(registry.LOCAL_MACHINE, CAP2020_SOFTWARE, registry.READ)
+	if err == registry.ErrNotExist {
+		return false, false, nil
+	} else if err != nil {
+		return false, false, errors.Wrap(err, "Cannot open registry key for software version")
+	}
+	defer k.Close()
+
+	v, _, err := k.GetStringValue("DisplayVersion")
+	if err != nil {
+		return false, false, errors.Wrap(err, "Cannot read value DisplayVersion")
+	}
+
+	return true, (v == CAP2020_SOFTWARE_CURRENT), nil
+}
+
 func InstallNetworkCatalog() error {
 	exec.Command("net", "use", "A:", "/delete").Run()
-	
-	out, err := exec.Command("net", "use", "A:", `\\10.0.9.147\2020catalogbeta`, "/persistent:no").CombinedOutput()
+
+	out, err := exec.Command("net", "use", "A:", PATH_CATALOG, "/persistent:no").CombinedOutput()
 	if err != nil {
 		return errors.Wrapf(err, "NET USE command output: %s", out)
 	}
@@ -95,6 +116,23 @@ func InstallNetworkCatalog() error {
 	}
 
 	return nil
+}
+
+func InstallSoftware() error {
+	exec.Command("net", "use", "B:", "/delete").Run()
+
+	out, err := exec.Command("net", "use", "B:", PATH_SOFTWARE, "/persistent:no").CombinedOutput()
+	if err != nil {
+		return errors.Wrapf(err, "NET USE command output: %s", out)
+	}
+
+	out, err = exec.Command("msiexec", "/i", `B:\20-20 Commercial Software.msi`, "/passive", "/forcerestart").CombinedOutput()
+	if err != nil {
+		return errors.Wrapf(err, "Setup command output: %s", out)
+	}
+
+	return nil
+
 }
 
 func ExitWithSuccess(m string) {
@@ -118,25 +156,50 @@ func ExitWithoutSuccess(m string) {
 func main() {
 	var err error
 
-	isInstalled, isOnNetwork, err := GetCatalogStatus()
+	softInstalled, softCurrent, err := GetSoftwareStatus()
+	if err != nil {
+		ExitWithError("Unable to check software status.", err)
+	}
+
+	if !softInstalled {
+		fmt.Println("2020 software is not installed.")
+		err = InstallSoftware()
+		if err != nil {
+			ExitWithError("Unable to install the 2020 software. Restart your computer and try again manually.", err)
+		}
+		ExitWithoutSuccess("Software install will require a reboot. After reboot, run again to check catalog status.")
+	}
+
+	if !softCurrent {
+		fmt.Println("2020 software is out of date.")
+		err = InstallSoftware()
+		if err != nil {
+			ExitWithError("Unable to update the 2020 software. Restart your computer and try again manually.", err)
+		}
+		ExitWithoutSuccess("Software update will require a reboot. After reboot, run again to check catalog status.")
+	}
+
+	fmt.Println("Looks like the 2020 software is up to date. Let's check your catalog...")
+
+	catInstalled, catOnNetwork, err := GetCatalogStatus()
 	if err != nil {
 		ExitWithError("Unable to check for Network Deployment.", err)
 	}
 
-	if isOnNetwork {
+	if catOnNetwork {
 		ExitWithSuccess("You are using the 2020 Network Deployment. Nice.")
 		return
 	}
 
-	if isInstalled && !isOnNetwork {
+	if catInstalled && !catOnNetwork {
 		fmt.Println("Looks like you have the catalog installed locally, not on the network.")
 		err = UninstallCatalog()
 		if err != nil {
 			ExitWithError("Can't run the uninstaller for the catalog. Try running it yourself.", err)
 		}
 		fmt.Println("Checking the catalog status again...")
-		isInstalled, isOnNetwork, err = GetCatalogStatus()
-		if (err != nil) || (isInstalled && !isOnNetwork) {
+		catInstalled, catOnNetwork, err = GetCatalogStatus()
+		if (err != nil) || (catInstalled && !catOnNetwork) {
 			ExitWithoutSuccess("Finish uninstalling the local catalog, then run this again. You can close this window.")
 		}
 	}
@@ -147,8 +210,8 @@ func main() {
 		ExitWithError("Failed to install the network catalog.", err)
 	}
 	fmt.Println("Checking the catalog status again...")
-	isInstalled, isOnNetwork, err = GetCatalogStatus()
-	if err == nil && isInstalled && isOnNetwork {
+	catInstalled, catOnNetwork, err = GetCatalogStatus()
+	if err == nil && catInstalled && catOnNetwork {
 		ExitWithSuccess("Looks good. Network catalog is installed.")
 	}
 	ExitWithoutSuccess("Finish installing the catalog by using the wizard. You can close this window.")
