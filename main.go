@@ -25,8 +25,8 @@ const (
 	CAP2020_CATALOG          = `SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\20-20 COMMERCIAL CATALOGS`
 	CAP2020_SOFTWARE         = `SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\{5D4D912A-D5EE-4748-84B8-7C2C75EC4408}`
 	CAP2020_SOFTWARE_CURRENT = `13.00.13037`
-	PATH_CATALOG             = `\\10.0.9.147\2020catalogbeta`
-	PATH_SOFTWARE            = `\\10.0.9.147\2020software`
+	PATH_CATALOG             = `\\10.0.9.29\2020catalogbeta`
+	PATH_SOFTWARE            = `\\10.0.9.29\2020software\Setup.exe`
 )
 
 // Returned tuple is "installed", "on network", "error"
@@ -119,14 +119,7 @@ func InstallNetworkCatalog() error {
 }
 
 func InstallSoftware() error {
-	exec.Command("net", "use", "B:", "/delete").Run()
-
-	out, err := exec.Command("net", "use", "B:", PATH_SOFTWARE, "/persistent:no").CombinedOutput()
-	if err != nil {
-		return errors.Wrapf(err, "NET USE command output: %s", out)
-	}
-
-	out, err = exec.Command("msiexec", "/i", `B:\20-20 Commercial Software.msi`, "/passive", "/forcerestart").CombinedOutput()
+	out, err := exec.Command(PATH_SOFTWARE).CombinedOutput()
 	if err != nil {
 		return errors.Wrapf(err, "Install command output: %s", out)
 	}
@@ -175,7 +168,7 @@ func main() {
 		if err != nil {
 			ExitWithError("Unable to install the 2020 software. Restart your computer and try again manually.", err)
 		}
-		ExitWithoutSuccess("Software install will require a reboot. After reboot, run again to check catalog status.")
+		ExitWithoutSuccess("Complete the install process manually and run this again afterward.")
 	}
 
 	if !softCurrent {
