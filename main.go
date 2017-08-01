@@ -19,7 +19,6 @@ type DSACatalogState struct {
 	XMLName          xml.Name                `xml:"StateCookieInfo"`
 	UsingNetwork     bool                    `xml:"Client>NetworkInfo>IsNetworkDeployment"`
 	GranulePicks     []DSACatalogGranulePick `xml:"Client>UserPicks>GranulePicks>GranulePick"`
-	ServerDest       string                  `xml:"Server>Destination"`
 	LastDiscLocation string
 }
 
@@ -61,11 +60,6 @@ func GetCatalogStatus() (int, error) {
 			catalogstate.GranulePicks[j].SelectionState == `Selected` {
 			return CATALOG_STATE_LOCAL, nil
 		}
-	}
-
-	if catalogstate.ServerDest != `\\10.0.9.29\2020catalogbeta\` {
-		fmt.Printf("Catalog Server Destination is incorrectly %s\n", catalogstate.ServerDest)
-		return CATALOG_STATE_INVALID, nil
 	}
 
 	if catalogstate.LastDiscLocation != `\\10.0.9.29\2020catalogbeta\ClientSetup` {
