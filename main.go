@@ -25,7 +25,7 @@ const (
 	CAP2020_CATALOG          = `SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\20-20 COMMERCIAL CATALOGS`
 	CAP2020_SOFTWARE         = `SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\{5D4D912A-D5EE-4748-84B8-7C2C75EC4408}`
 	CAP2020_SOFTWARE_CURRENT = `13.00.13037`
-	PATH_CATALOG             = `\\10.0.9.29\2020catalogbeta`
+	PATH_CATALOG             = `\\10.0.9.29\2020catalogbeta\ClientSetup\setup.exe`
 	PATH_SOFTWARE            = `\\10.0.9.29\2020software\Setup.exe`
 )
 
@@ -101,14 +101,7 @@ func GetSoftwareStatus() (bool, bool, error) {
 }
 
 func InstallNetworkCatalog() error {
-	exec.Command("net", "use", "A:", "/delete").Run()
-
-	out, err := exec.Command("net", "use", "A:", PATH_CATALOG, "/persistent:no").CombinedOutput()
-	if err != nil {
-		return errors.Wrapf(err, "NET USE command output: %s", out)
-	}
-
-	out, err = exec.Command(`A:\ClientSetup\setup.exe`).CombinedOutput()
+	out, err := exec.Command(PATH_CATALOG).CombinedOutput()
 	if err != nil {
 		return errors.Wrapf(err, "Setup command output: %s", out)
 	}
