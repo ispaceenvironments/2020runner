@@ -32,11 +32,9 @@ const (
 // Returned tuple is "installed", "on network", "error"
 func GetCatalogStatus() (bool, bool, error) {
 	f, err := os.Open(`C:\ProgramData\2020\DSA\2020Catalogs-StateCookie.xml`)
-	if err == os.ErrNotExist {
-		// This is fine, it just means the software isn't installed
+	if err != nil {
+		// This is fine, it likely just means the software isn't installed
 		return false, false, nil
-	} else if err != nil {
-		return false, false, errors.Wrap(err, "Cannot open DSA state XML file")
 	}
 	defer f.Close()
 
