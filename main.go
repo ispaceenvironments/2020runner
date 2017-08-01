@@ -128,11 +128,19 @@ func InstallSoftware() error {
 
 	out, err = exec.Command("msiexec", "/i", `B:\20-20 Commercial Software.msi`, "/passive", "/forcerestart").CombinedOutput()
 	if err != nil {
-		return errors.Wrapf(err, "Setup command output: %s", out)
+		return errors.Wrapf(err, "Install command output: %s", out)
 	}
 
 	return nil
+}
 
+func UninstallSoftware() error {
+	out, err := exec.Command("msiexec", "/x", `{5D4D912A-D5EE-4748-84B8-7C2C75EC4408}`, "/passive", "/forcerestart").CombinedOutput()
+	if err != nil {
+		return errors.Wrapf(err, "Uninstall command output: %s", out)
+	}
+
+	return nil
 }
 
 func ExitWithSuccess(m string) {
@@ -171,12 +179,12 @@ func main() {
 	}
 
 	if !softCurrent {
-		fmt.Println("2020 software is out of date.")
-		err = InstallSoftware()
+		fmt.Println("2020 software is out of date. Uninstalling current software...")
+		err = UninstallSoftware()
 		if err != nil {
-			ExitWithError("Unable to update the 2020 software. Restart your computer and try again manually.", err)
+			ExitWithError("Unable to uninstall the 2020 software. Restart your computer and try again manually.", err)
 		}
-		ExitWithoutSuccess("Software update will require a reboot. After reboot, run again to check catalog status.")
+		ExitWithoutSuccess("Software uninstall will require a reboot. After reboot, run again to update software.")
 	}
 
 	fmt.Println("Looks like the 2020 software is up to date. Let's check your catalog...")
