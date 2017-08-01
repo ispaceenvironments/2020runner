@@ -7,6 +7,7 @@ import "os/exec"
 import "os"
 import "encoding/xml"
 import "time"
+import "strings"
 
 type DSACatalogGranulePick struct {
 	XMLName        xml.Name `xml:"GranulePick"`
@@ -62,7 +63,7 @@ func GetCatalogStatus() (int, error) {
 		}
 	}
 
-	if catalogstate.LastDiscLocation != `\\10.0.9.29\2020catalogbeta\ClientSetup` {
+	if !strings.EqualFold(catalogstate.LastDiscLocation, `\\10.0.9.29\2020catalogbeta\ClientSetup\`) {
 		fmt.Printf("Catalog Last Disc Location is incorrectly %s\n", catalogstate.LastDiscLocation)
 		return CATALOG_STATE_INVALID, nil
 	}
@@ -87,7 +88,7 @@ func UninstallCatalog() error {
 	}
 
 	// Verify that the uninstall command looks like one we recognize.
-	if v != `C:\Program Files (x86)\2020\DSA\dsa.exe /removeall /rootpath "C:\ProgramData\2020\DSA"` {
+	if !strings.EqualFold(v, `C:\Program Files (x86)\2020\DSA\dsa.exe /removeall /rootpath "C:\ProgramData\2020\DSA"`) {
 		return errors.Errorf("UninstallString had an unexpected value of %s", v)
 	}
 
