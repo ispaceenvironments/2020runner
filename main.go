@@ -16,9 +16,11 @@ type DSACatalogGranulePick struct {
 }
 
 type DSACatalogState struct {
-	XMLName      xml.Name                `xml:"StateCookieInfo"`
-	UsingNetwork bool                    `xml:"Client>NetworkInfo>IsNetworkDeployment"`
-	GranulePicks []DSACatalogGranulePick `xml:"Client>UserPicks>GranulePicks>GranulePick"`
+	XMLName          xml.Name                `xml:"StateCookieInfo"`
+	UsingNetwork     bool                    `xml:"Client>NetworkInfo>IsNetworkDeployment"`
+	GranulePicks     []DSACatalogGranulePick `xml:"Client>UserPicks>GranulePicks>GranulePick"`
+	ServerDest       string                  `xml:"Server>Destination"`
+	LastDiscLocation string
 }
 
 const (
@@ -29,12 +31,18 @@ const (
 	PATH_SOFTWARE            = `\\10.0.9.29\2020software\Setup.exe`
 )
 
-// Returned tuple is "installed", "on network", "error"
-func GetCatalogStatus() (bool, bool, error) {
+const (
+	CATALOG_STATE_MISSNG = iota
+	CATALOG_STATE_LOCAL
+	CATALOG_STATE_NETWORK
+	CATALOG_STATE_INVALID
+)
+
+func GetCatalogStatus() (int, error) {
 	f, err := os.Open(`C:\ProgramData\2020\DSA\2020Catalogs-StateCookie.xml`)
 	if err != nil {
 		// This is fine, it likely just means the software isn't installed
-		return false, false, nil
+		return CATALOG_STATE_MISSNG, nil
 	}
 	defer f.Close()
 
@@ -42,7 +50,7 @@ func GetCatalogStatus() (bool, bool, error) {
 	dec := xml.NewDecoder(f)
 	err = dec.Decode(&catalogstate)
 	if err != nil {
-		return false, false, errors.Wrap(err, "Cannot decode DSA state XML file")
+		return CATALOG_STATE_INVALID, errors.Wrap(err, "Cannot decode DSA state XML file")
 	}
 
 	// The Demo package is mandatory for all installs, so we can check if it's selected
@@ -51,11 +59,25 @@ func GetCatalogStatus() (bool, bool, error) {
 		if catalogstate.GranulePicks[j].MfgCode == `DMO` &&
 			catalogstate.GranulePicks[j].PlatformType == `CAP` &&
 			catalogstate.GranulePicks[j].SelectionState == `Selected` {
-			return true, catalogstate.UsingNetwork, nil
+			return CATALOG_STATE_LOCAL, nil
 		}
 	}
 
-	return false, catalogstate.UsingNetwork, nil
+	if catalogstate.ServerDest != `\\10.0.9.29\2020catalogbeta\` {
+		fmt.Printf("Catalog Server Destination is incorrectly %s\n", catalogstate.ServerDest)
+		return CATALOG_STATE_INVALID, nil
+	}
+
+	if catalogstate.LastDiscLocation != `\\10.0.9.29\2020catalogbeta\ClientSetup` {
+		fmt.Printf("Catalog Last Disc Location is incorrectly %s\n", catalogstate.LastDiscLocation)
+		return CATALOG_STATE_INVALID, nil
+	}
+
+	return CATALOG_STATE_NETWORK, nil
+}
+
+func CleanCatalog() error {
+	return os.RemoveAll(`C:\ProgramData\2020\DSA`)
 }
 
 func UninstallCatalog() error {
@@ -101,8 +123,6 @@ func GetSoftwareStatus() (bool, bool, error) {
 }
 
 func InstallNetworkCatalog() error {
-	// If we're installing the network catalog anyway, the local catalog should have already been uninstalled
-	os.RemoveAll(`C:\ProgramData\2020\DSA`)
 	out, err := exec.Command(PATH_CATALOG).CombinedOutput()
 	if err != nil {
 		return errors.Wrapf(err, "Setup command output: %s", out)
@@ -175,27 +195,24 @@ func main() {
 
 	fmt.Println("Looks like the 2020 software is up to date. Let's check your catalog...")
 
-	catInstalled, catOnNetwork, err := GetCatalogStatus()
+	catState, err := GetCatalogStatus()
 	if err != nil {
 		ExitWithError("Unable to check for Network Deployment.", err)
 	}
 
-	if catOnNetwork {
+	if catState == CATALOG_STATE_NETWORK {
 		ExitWithSuccess("You are using the 2020 Network Deployment. Nice.")
-		return
 	}
 
-	if catInstalled && !catOnNetwork {
+	if catState == CATALOG_STATE_LOCAL {
 		fmt.Println("Looks like you have the catalog installed locally, not on the network.")
+		fmt.Println("Uninstalling local catalog.")
 		err = UninstallCatalog()
 		if err != nil {
 			ExitWithError("Can't run the uninstaller for the catalog. Try running it yourself.", err)
 		}
-		fmt.Println("Checking the catalog status again...")
-		catInstalled, catOnNetwork, err = GetCatalogStatus()
-		if (err != nil) || (catInstalled && !catOnNetwork) {
-			ExitWithoutSuccess("Finish uninstalling the local catalog, then run this again. You can close this window.")
-		}
+		fmt.Println("Clearing out remaining files after uninstall.")
+		CleanCatalog()
 	}
 
 	fmt.Println("Installing the network catalog...")
@@ -204,9 +221,9 @@ func main() {
 		ExitWithError("Failed to install the network catalog.", err)
 	}
 	fmt.Println("Checking the catalog status again...")
-	catInstalled, catOnNetwork, err = GetCatalogStatus()
-	if err == nil && catInstalled && catOnNetwork {
-		ExitWithSuccess("Looks good. Network catalog is installed.")
+	catState, err = GetCatalogStatus()
+	if err == nil && catState == CATALOG_STATE_NETWORK {
+		ExitWithSuccess("Looks good. Network catalog is now installed.")
 	}
 	ExitWithoutSuccess("Finish installing the catalog by using the wizard. You can close this window.")
 }
